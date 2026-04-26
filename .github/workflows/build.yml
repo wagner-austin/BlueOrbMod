@@ -1,0 +1,86 @@
+name: Build (Windows + VS 2022)
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout workspace
+        uses: actions/checkout@v4
+        with:
+          path: BlueOrbMod
+
+      - name: Checkout DeusExe fork
+        uses: actions/checkout@v4
+        with:
+          repository: wagner-austin/DeusExe
+          path: BlueOrbMod/DeusExe
+
+      - name: Checkout render11 fork
+        uses: actions/checkout@v4
+        with:
+          repository: wagner-austin/render11
+          path: BlueOrbMod/render11
+
+      - name: Set up MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Verify environment
+        shell: pwsh
+        run: |
+          Write-Host "PowerShell: $($PSVersionTable.PSVersion)"
+          Write-Host "OS: $([System.Environment]::OSVersion.VersionString)"
+          $sdks = Get-ChildItem 'C:\Program Files (x86)\Windows Kits\10\Include' -Directory -ErrorAction SilentlyContinue | ForEach-Object Name
+          Write-Host "Windows SDK versions: $($sdks -join ', ')"
+
+      - name: Run setup.ps1 (download SDK + apply patches)
+        shell: pwsh
+        working-directory: BlueOrbMod
+        run: ./scripts/setup.ps1
+
+      - name: Run build-all.ps1
+        shell: pwsh
+        working-directory: BlueOrbMod
+        run: ./scripts/build-all.ps1
+
+      - name: Verify outputs
+        shell: pwsh
+        working-directory: BlueOrbMod
+        run: |
+          $expected = @(
+            'dist/deusex.exe',
+            'dist/Render11.dll',
+            'dist/Render11/ComplexSurface.hlsl',
+            'dist/Render11/Gouraud.hlsl',
+            'dist/Render11/Tile.hlsl',
+            'dist/Render11/Render11.hlsli'
+          )
+          $missing = @()
+          foreach ($p in $expected) {
+            if (-not (Test-Path $p)) { $missing += $p }
+          }
+          if ($missing.Count -gt 0) {
+            Write-Host "Missing artifacts:" -ForegroundColor Red
+            $missing | ForEach-Object { Write-Host "  - $_" }
+            exit 1
+          }
+          Write-Host "All expected artifacts present." -ForegroundColor Green
+          Get-ChildItem dist -Recurse | Select-Object FullName, Length | Format-Table
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: BlueOrbMod-binaries-${{ github.sha }}
+          path: BlueOrbMod/dist/
+          retention-days: 30
