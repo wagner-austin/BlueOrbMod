@@ -1,0 +1,18 @@
+# Workspace meta
+# Forks live in DeusExe/ and render11/ — they have their own .git histories,
+# their own .gitignore. Don't track them from this workspace either.
+DeusExe/
+render11/
+
+# SDK content — downloaded fresh per developer machine via setup.ps1.
+# Square Enix IP, never committed.
+_sdk_cache/
+_sdk_extract/
+games/
+
+# Build outputs
+dist/
+
+# OS noise
+Thumbs.db
+.DS_Store
