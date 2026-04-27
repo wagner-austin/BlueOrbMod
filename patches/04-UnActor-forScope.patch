@@ -1,0 +1,12 @@
+--- a/engine/inc/UnActor.h
++++ b/engine/inc/UnActor.h
+@@ -58,7 +58,8 @@
+ //
+ inline AActor* AActor::GetTopOwner()
+ {
+-	for( AActor* Top=this; Top->Owner; Top=Top->Owner );
++	AActor* Top;
++	for( Top=this; Top->Owner; Top=Top->Owner );
+ 	return Top;
+ }
+ 

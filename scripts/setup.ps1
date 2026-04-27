@@ -31,13 +31,18 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
-$Root         = Split-Path -Parent $PSScriptRoot
-$SdkUrl       = 'https://download.deusexnetwork.com/20/DeusExSDK1112f.exe'
-$SdkExpectMd5 = '1d7560c513f945b607ee96cd2f9aec57'
-$SdkCachePath = Join-Path $Root '_sdk_cache/DeusExSDK1112f.exe'
-$SdkExtract   = Join-Path $Root '_sdk_extract'
-$GamesDir     = Join-Path $Root 'games/DeusEx'
-$PatchesDir   = Join-Path $Root 'patches'
+$Root            = Split-Path -Parent $PSScriptRoot
+$SdkUrl          = 'https://download.deusexnetwork.com/20/DeusExSDK1112f.exe'
+# Dual-pin: MD5 matches the publisher's published hash on
+# deusexnetwork.com / ModDB (so we verify against the source's claim).
+# SHA-256 is our own integrity record (collision-resistant, our line of
+# defense against tampering). Both must match the cached file.
+$SdkExpectMd5    = '1d7560c513f945b607ee96cd2f9aec57'
+$SdkExpectSha256 = 'a54e16632820353725c59c70de5d32323c27a232ecc4b681290bce0b51a3eb28'
+$SdkCachePath    = Join-Path $Root '_sdk_cache/DeusExSDK1112f.exe'
+$SdkExtract      = Join-Path $Root '_sdk_extract'
+$GamesDir        = Join-Path $Root 'games/DeusEx'
+$PatchesDir      = Join-Path $Root 'patches'
 
 function Step($Msg) { Write-Host "==> $Msg" -ForegroundColor Cyan }
 function Ok($Msg)   { Write-Host "    OK: $Msg" -ForegroundColor Green }
@@ -70,11 +75,19 @@ if (-not (Test-Path $SdkCachePath) -or $Force) {
     Write-Host "    Downloading from $SdkUrl..."
     Invoke-WebRequest -Uri $SdkUrl -OutFile $SdkCachePath -UseBasicParsing
 }
+$actualSha256 = (Get-FileHash -Algorithm SHA256 -Path $SdkCachePath).Hash.ToLower()
+if ($actualSha256 -ne $SdkExpectSha256) {
+    Fail "SDK SHA-256 mismatch. Expected $SdkExpectSha256, got $actualSha256. Delete _sdk_cache/ and retry."
+}
+# MD5 is the publisher's hash; we verify it as a cross-check against
+# the source. Not used for security (SHA-256 above is the security
+# anchor), so the broken-hash warning is suppressed for this line.
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingBrokenHashAlgorithms', '', Justification = 'Cross-check against publisher published MD5. SHA-256 is the primary integrity check.')]
 $actualMd5 = (Get-FileHash -Algorithm MD5 -Path $SdkCachePath).Hash.ToLower()
 if ($actualMd5 -ne $SdkExpectMd5) {
-    Fail "SDK MD5 mismatch. Expected $SdkExpectMd5, got $actualMd5. Delete _sdk_cache/ and retry."
+    Fail "SDK MD5 cross-check failed. Expected $SdkExpectMd5, got $actualMd5."
 }
-Ok "SDK MD5 verified: $actualMd5"
+Ok "SDK SHA-256 verified: $actualSha256 (MD5 cross-check passed)"
 
 # --- Step 3: extract + map ------------------------------------------------
 Step 'Extracting and mapping SDK contents'
@@ -86,7 +99,7 @@ if ((Test-Path $GamesDir) -and -not $Force) {
     if (Test-Path $GamesDir)   { Remove-Item -Recurse -Force $GamesDir }
     New-Item -ItemType Directory -Force -Path $SdkExtract | Out-Null
 
-    # The SDK .exe is a WinZip self-extractor — rename to .zip and unzip.
+    # The SDK .exe is a WinZip self-extractor; rename to .zip and unzip.
     $sdkZip = Join-Path $SdkExtract 'DeusExSDK1112f.zip'
     Copy-Item $SdkCachePath $sdkZip
     Expand-Archive -Path $sdkZip -DestinationPath $SdkExtract -Force
@@ -116,7 +129,7 @@ if ((Test-Path $GamesDir) -and -not $Force) {
         if (Test-Path $srcLib) { Copy-Item -Force $srcLib (Join-Path $destLib "$lower.lib") }
     }
 
-    # Window.h includes "..\Src\Res\WindowRes.h" — preserve that path.
+    # Window.h includes "..\Src\Res\WindowRes.h" - preserve that path.
     $winRes = Join-Path $SdkExtract 'DxHeaders/Window/Src/Res'
     if (Test-Path $winRes) {
         $destRes = Join-Path $GamesDir 'window/Src/Res'
@@ -130,27 +143,38 @@ if ((Test-Path $GamesDir) -and -not $Force) {
 Step 'Applying SDK modernization patches'
 
 Push-Location $GamesDir
+# Scope $ErrorActionPreference locally for git invocations: git writing
+# to stderr is how it signals patch state (already-applied is reported
+# via stderr + non-zero exit). PS5.1 wraps native stderr as ErrorRecord
+# under EAP=Stop, which would terminate the loop.
+$prevEAP = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
 try {
-    # Use git apply (no actual git repo needed; --unsafe-paths if outside repo).
     $patchFiles = Get-ChildItem $PatchesDir -Filter '*.patch' | Sort-Object Name
     foreach ($p in $patchFiles) {
         Write-Host "    Applying $($p.Name)"
-        $check = & git apply --check $p.FullName 2>&1
-        if ($LASTEXITCODE -ne 0) {
-            # Already applied? Test reverse-apply check.
+        & git apply --check $p.FullName 2>&1 | Out-Null
+        $forwardOk = $LASTEXITCODE -eq 0
+        if (-not $forwardOk) {
             & git apply --reverse --check $p.FullName 2>&1 | Out-Null
-            if ($LASTEXITCODE -eq 0) {
+            $reverseOk = $LASTEXITCODE -eq 0
+            if ($reverseOk) {
                 Warn "$($p.Name) already applied, skipping"
                 continue
             }
-            Fail "Patch $($p.Name) failed --check: $check"
+            $ErrorActionPreference = $prevEAP
+            Fail "Patch $($p.Name) does not apply forward AND does not reverse - drift between patch and SDK"
         }
-        & git apply $p.FullName
-        if ($LASTEXITCODE -ne 0) { Fail "Patch $($p.Name) failed to apply" }
+        & git apply $p.FullName 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            $ErrorActionPreference = $prevEAP
+            Fail "Patch $($p.Name) failed to apply"
+        }
     }
     Ok "$($patchFiles.Count) patch(es) applied"
 } finally {
     Pop-Location
+    $ErrorActionPreference = $prevEAP
 }
 
 Write-Host ''

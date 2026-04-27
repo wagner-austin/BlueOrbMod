@@ -1,6 +1,16 @@
 --- a/window/inc/Window.h
 +++ b/window/inc/Window.h
-@@ -1585,7 +1585,7 @@
+@@ -614,7 +614,8 @@
+ 	static LONG APIENTRY StaticWndProc( HWND hWnd, UINT Message, UINT wParam, LONG lParam )
+ 	{
+ 		guard(WWindow::StaticProc);
+-		for( INT i=0; i<_Windows.Num(); i++ )
++		INT i;
++		for( i=0; i<_Windows.Num(); i++ )
+ 			if( _Windows(i)->hWnd==hWnd )
+ 				break;
+ 		if( i==_Windows.Num() && (Message==WM_NCCREATE || Message==WM_INITDIALOG) )
+@@ -1585,7 +1586,7 @@
  	WUrlButton()
  	{}
  	WUrlButton( WWindow* InOwner, const TCHAR* InURL, INT InId=0 )
@@ -9,7 +19,17 @@
  	, URL( InURL )
  	{
  		FrameFlags = CBFF_ShowOver | CBFF_UrlStyle | CBFF_NoCenter;
-@@ -2278,7 +2278,7 @@
+@@ -2182,7 +2183,8 @@
+ 					Reader->Serialize( &AnsiText(0), AnsiText.Num() );
+ 					delete Reader;
+ 					INT CrCount=0;
+-					for( INT Ofs=AnsiText.Num()-1; Ofs>0 && CrCount<MaxLines; Ofs-- )
++					INT Ofs;
++					for( Ofs=AnsiText.Num()-1; Ofs>0 && CrCount<MaxLines; Ofs-- )
+ 						CrCount += (AnsiText(Ofs)=='\n');
+ 					while( Ofs<AnsiText.Num() && AnsiText(Ofs)=='\n' )
+ 						Ofs++;
+@@ -2278,7 +2280,7 @@
  			Exec->Exec( TEXT("TakeFocus"), *GLogWindow );
  			TCHAR NewURL[1024];
  			if
@@ -18,7 +38,17 @@
  			&&	NewURL[0]!='-')
  				Exec->Exec( *(US+TEXT("Open ")+NewURL),*GLogWindow );
  		}
-@@ -2485,8 +2485,8 @@
+@@ -2425,7 +2427,8 @@
+ 	{
+ 		guard(WDialog::OnInitDialog);
+ 		WWindow::OnInitDialog();
+-		for( INT i=0; i<Controls.Num(); i++ )
++		INT i;
++		for( i=0; i<Controls.Num(); i++ )
+ 		{
+ 			// Bind all child controls.
+ 			WControl* Control = Controls(i);
+@@ -2485,8 +2488,8 @@
  	// Constructor.
  	WPasswordDialog()
  	: WDialog	  ( TEXT("PasswordDialog"), IDDIALOG_Password )
@@ -29,7 +59,7 @@
  	, Name		  ( this, IDEDIT_Name )
  	, Password	  ( this, IDEDIT_Password )
  	, Prompt      ( this, IDLABEL_Prompt )
-@@ -2535,7 +2535,7 @@
+@@ -2535,7 +2538,7 @@
  	WTextScrollerDialog( const TCHAR* InCaption, const TCHAR* InMessage )
  	: WDialog	( TEXT("TextScrollerDialog"), IDDIALOG_TextScroller )
  	, TextEdit  ( this, IDEDIT_TextEdit )
@@ -38,7 +68,17 @@
  	, Caption   ( InCaption )
  	, Message   ( InMessage )
  	{}
-@@ -3648,8 +3648,8 @@
+@@ -3327,7 +3330,8 @@
+ 		while( Index+1<Count )
+ 		{
+ 			FTreeItem* NextItem = OwnerProperties->GetListItem(Index+1);
+-			for( FTreeItem* Check=NextItem->Parent; Check && Check!=this; Check=Check->Parent );
++			FTreeItem* Check;
++			for( Check=NextItem->Parent; Check && Check!=this; Check=Check->Parent );
+ 			if( !Check )
+ 				break;
+ 			NextItem->Expanded = 0;
+@@ -3648,8 +3652,8 @@
  				Rect.Min.X = 28+OwnerProperties->GetDividerWidth();
  				Rect.Min.Y--;
  				TrackControl = new WTrackBar( &OwnerProperties->List );
@@ -49,7 +89,7 @@
  				TrackControl->OpenWindow( 0 );
  				TrackControl->SetTicFreq( 32 );
  				TrackControl->SetRange( 0, 255 );
-@@ -3675,8 +3675,8 @@
+@@ -3675,8 +3679,8 @@
  
  				ComboControl = new WComboBox( HolderControl );
  				ComboControl->Snoop = this;
@@ -60,7 +100,7 @@
  				ComboControl->OpenWindow( 0 );
  				ComboControl->MoveWindow( Rect-HolderRect.Min, 1 );
  
-@@ -3718,29 +3718,29 @@
+@@ -3718,29 +3722,29 @@
  			{
  				if( Expandable )
  				{
@@ -98,7 +138,7 @@
  			}
  			if
  			(	(Property->IsA(UFloatProperty ::StaticClass()))
-@@ -4196,8 +4196,8 @@
+@@ -4196,8 +4200,8 @@
  		if( PersistentName!=NAME_None )
  			GConfig->GetInt( TEXT("WindowPositions"), *(FString(*PersistentName)+TEXT(".Split")), DividerWidth );
  		PropertiesWindows.AddItem( this );
@@ -109,7 +149,17 @@
  		unguard;
  	}
  
-@@ -4891,7 +4891,7 @@
+@@ -4465,7 +4469,8 @@
+ 			QWORD      Id   = Item->GetId();
+ 			if( Item->Expandable && !Item->Expanded )
+ 			{
+-				for( INT j=0; j<Remembered.Num(); j++ )
++				INT j;
++				for( j=0; j<Remembered.Num(); j++ )
+ 					if( Remembered(j)==Id )
+ 						break;
+ 				if( j<Remembered.Num() )
+@@ -4891,7 +4896,7 @@
  	void OnItemSetFocus()
  	{
  		FPropertyItemBase::OnItemSetFocus();
@@ -118,7 +168,17 @@
  	}
  	void Expand()
  	{
-@@ -5114,10 +5114,10 @@
+@@ -4982,7 +4987,8 @@
+ 		UObject::GetPreferences( NewPrefs, *Prefs.Caption, 0 );
+ 		for( INT i=0; i<NewPrefs.Num(); i++ )
+ 		{
+-			for( INT j=0; j<Children.Num(); j++ )
++			INT j;
++			for( j=0; j<Children.Num(); j++ )
+ 			{
+ 				if( appStricmp( *Children(j)->GetCaption(), *NewPrefs(i).Caption )==0 )
+ 					break;
+@@ -5114,10 +5120,10 @@
  	WWizardDialog()
  	: WDialog	    ( TEXT("WizardDialog"), IDDIALOG_WizardDialog )
  	, PageHolder    ( this, IDC_PageHolder )

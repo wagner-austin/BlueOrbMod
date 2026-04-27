@@ -10,8 +10,18 @@ _sdk_cache/
 _sdk_extract/
 games/
 
+# Local reference copies of UT469 headers (used at patch-development
+# time to crib modernization patterns, then thrown away)
+_ut469_ref/
+
 # Build outputs
 dist/
+
+# Workspace-local PSGallery modules (installed by scripts/install-tools.ps1)
+.tools/
+
+# Coverage report from scripts/test.ps1 -Coverage
+coverage.xml
 
 # OS noise
 Thumbs.db

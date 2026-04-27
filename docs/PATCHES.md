@@ -71,25 +71,43 @@ change.
 
 ## Build configuration patches
 
-Several other modernization changes live directly in our forks
-(committed to `wagner-austin/DeusExe` and `wagner-austin/render11`)
-since they're build-system, not SDK content:
+Build-system changes live in the forks (committed to
+`wagner-austin/DeusExe` and `wagner-austin/render11`) since they're
+not SDK content.
+
+### Modernization (real fixes; no longer suppressing)
 
 - Toolset: v140 / v142 → **v143** (VS 2022)
 - WindowsTargetPlatformVersion: 10.0.10586 → **10.0.26100**
 - Include path prefix: `../games/...` → `../../games/...` (so the SDK
   can live at the workspace root, sibling to both forks)
-- Detours include path: `../detours` → `../../detours/src`
-- Preprocessor define: `WINDOWS_IGNORE_PACKING_MISMATCH` (the SDK uses
-  `pragma pack(4)` for engine struct compatibility; modern winnt.h
-  static-asserts default packing — this define silences that without
-  changing packing)
-- Compiler flags: `/Zc:forScope-`, `/Zc:wchar_t-`, `<ConformanceMode>false</ConformanceMode>`,
-  `<TreatWarningAsError>false</TreatWarningAsError>` — relax modern
-  C++ conformance for the older SDK style
-- res.rc: `#include "afxres.h"` (legacy MFC) →
+- res.rc: `#include "afxres.h"` (legacy MFC, not in VS 2022) →
   `#include "winres.h"` (modern non-MFC equivalent that still defines
   IDC_STATIC etc.)
+- Strict conformance restored: `/permissive-` (no `<ConformanceMode>false</ConformanceMode>`),
+  modern for-loop scoping (no `/Zc:forScope-`), warnings-as-errors
+  (`<TreatWarningAsError>true</TreatWarningAsError>`).
+- Real source patches in `patches/` for each non-conforming SDK
+  pattern (typename, member pointers, for-init scope leaks,
+  noexcept(false) destructors).
+
+### Load-bearing suppressions (ABI requirements)
+
+These cannot be removed without engine.lib's source, which Square
+Enix has never released. Each is required for binary compatibility
+with the precompiled engine.lib that ships in the DX SDK.
+
+| Token | What it does | Why it stays |
+|---|---|---|
+| `<StructMemberAlignment>4Bytes</StructMemberAlignment>` | Compiles our code with 4-byte struct packing | engine.lib was compiled with 4-byte packing; struct layouts must match or every interaction reads garbage |
+| `<TreatWChar_tAsBuiltInType>false</TreatWChar_tAsBuiltInType>` | Treats `wchar_t` as `unsigned short` typedef, not built-in | engine.lib's symbol mangling assumes `wchar_t == unsigned short`; mismatch causes link errors or silent miscompiles |
+| `WINDOWS_IGNORE_PACKING_MISMATCH` | Disables the static_assert in `winnt.h` that fires when the user code's struct packing differs from default | This define is Microsoft's documented mechanism for legitimate ABI packing differences. `winnt.h` literally checks for this define and disables the assert when present. Required because of `StructMemberAlignment=4Bytes` above. |
+| `<DisableSpecificWarnings>4121;...</DisableSpecificWarnings>` | Disables C4121 ("alignment of a member was sensitive to packing") from Windows SDK headers | Same root cause as `StructMemberAlignment=4Bytes`. C4121 fires on Windows SDK structs that we read but never modify; the warning is informational. We can't change Windows headers and we can't change our packing requirement. |
+
+These are tracked by `scripts/guard.ps1` Rule 2: every suppression in
+`launcher.props` / `Render DLL.props` must have a corresponding
+explanation here or in `docs/DEPENDENCIES.md`. New suppressions
+without docs are guard violations.
 
 See the commits on each fork's `master` branch for the exact diffs.
 
