@@ -38,21 +38,38 @@ jobs:
 
       - name: Verify environment
         shell: pwsh
-        run: |
-          Write-Host "PowerShell: $($PSVersionTable.PSVersion)"
-          Write-Host "OS: $([System.Environment]::OSVersion.VersionString)"
-          $sdks = Get-ChildItem 'C:\Program Files (x86)\Windows Kits\10\Include' -Directory -ErrorAction SilentlyContinue | ForEach-Object Name
-          Write-Host "Windows SDK versions: $($sdks -join ', ')"
+        working-directory: BlueOrbMod
+        run: ./scripts/verify-env.ps1
 
-      - name: Run setup.ps1 (download SDK + apply patches)
+      - name: Install PSGallery tools (Pester, PSScriptAnalyzer)
+        shell: pwsh
+        working-directory: BlueOrbMod
+        run: ./scripts/install-tools.ps1
+
+      - name: Setup (download SDK + apply patches)
         shell: pwsh
         working-directory: BlueOrbMod
         run: ./scripts/setup.ps1
 
-      - name: Run build-all.ps1
+      - name: Lint
+        shell: pwsh
+        working-directory: BlueOrbMod
+        run: ./scripts/lint.ps1
+
+      - name: Guard (project rules)
+        shell: pwsh
+        working-directory: BlueOrbMod
+        run: ./scripts/guard.ps1
+
+      - name: Build
         shell: pwsh
         working-directory: BlueOrbMod
         run: ./scripts/build-all.ps1
+
+      - name: Test
+        shell: pwsh
+        working-directory: BlueOrbMod
+        run: ./scripts/test.ps1
 
       - name: Verify outputs
         shell: pwsh
